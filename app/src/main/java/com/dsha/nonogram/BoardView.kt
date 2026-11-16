@@ -12,12 +12,14 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * 数织棋盘：自己绘制格子、提示数字，并处理点按 / 长按。
+ * 数织棋盘：自己绘制格子、提示数字，并处理交互。
  *
- * 交互：
- *  - 轻点：空白 <-> 涂色
- *  - 长按：空白 <-> 打叉（标记为确定不涂）
- *  - 打开“标记”模式后，轻点等价于长按
+ * 操作：
+ *  - 轻点：切换涂色 / 空白
+ *  - 长按（不移动）：切换打叉（标记为确定不涂）
+ *  - 按住拖动：从按下的格子开始连续涂色；如果按在已涂色格子上则连续擦除
+ *  - 「标记」模式打开时，点按与拖动都是打叉
+ *  - 一次拖动 = 一步撤销
  */
 class BoardView(context: Context) : View(context) {
 
@@ -25,6 +27,9 @@ class BoardView(context: Context) : View(context) {
         set(value) {
             field = value
             dirty = true
+            pressedIndex = -1
+            downIndex = -1
+            stroking = false
             invalidate()
         }
 
@@ -62,6 +67,9 @@ class BoardView(context: Context) : View(context) {
     private var pressedIndex = -1
     private var downIndex = -1
     private var downAt = 0L
+    private var stroking = false
+    private var strokeDirty = false
+    private var paintValue = GameState.FILLED
 
     private fun dp(v: Float): Float = v * density
 
@@ -108,13 +116,11 @@ class BoardView(context: Context) : View(context) {
         val right = left + n * cellSize
         val bottom = top + n * cellSize
 
-        // 棋盘底板
         fillPaint.color = COLOR_BOARD_BG
         tmp.set(left - dp(2f), top - dp(2f), right + dp(2f), bottom + dp(2f))
         val boardRadius = max(dp(6f), cellSize * 0.12f)
         canvas.drawRoundRect(tmp, boardRadius, boardRadius, fillPaint)
 
-        // 单元格
         val inset = max(dp(0.7f), cellSize * 0.05f)
         val radius = max(dp(1.5f), cellSize * 0.16f)
         for (r in 0 until n) {
@@ -128,11 +134,13 @@ class BoardView(context: Context) : View(context) {
                         tmp.set(x + inset, y + inset, x + cellSize - inset, y + cellSize - inset)
                         canvas.drawRoundRect(tmp, radius, radius, fillPaint)
                     }
+
                     GameState.FILLED -> {
                         fillPaint.color = COLOR_FILLED
                         tmp.set(x + inset, y + inset, x + cellSize - inset, y + cellSize - inset)
                         canvas.drawRoundRect(tmp, radius, radius, fillPaint)
                     }
+
                     else -> {
                         fillPaint.color = COLOR_CELL
                         tmp.set(x + inset, y + inset, x + cellSize - inset, y + cellSize - inset)
@@ -148,17 +156,16 @@ class BoardView(context: Context) : View(context) {
             }
         }
 
-        // 每 5 格加粗分隔线
         linePaint.style = Paint.Style.STROKE
         for (i in 0..n) {
             val strong = (n > 5 && i % 5 == 0) || i == 0 || i == n
             linePaint.color = if (strong) COLOR_LINE_STRONG else COLOR_LINE
-            linePaint.strokeWidth = if (strong) max(dp(1.2f), cellSize * 0.04f) else max(dp(0.6f), cellSize * 0.02f)
+            linePaint.strokeWidth =
+                if (strong) max(dp(1.2f), cellSize * 0.04f) else max(dp(0.6f), cellSize * 0.02f)
             canvas.drawLine(left + i * cellSize, top, left + i * cellSize, bottom, linePaint)
             canvas.drawLine(left, top + i * cellSize, right, top + i * cellSize, linePaint)
         }
 
-        // 提示数字
         val rowRuns = Array(n) { r -> runsOf(IntArray(n) { c -> s.cells[r * n + c] }) }
         val colRuns = Array(n) { c -> runsOf(IntArray(n) { r -> s.cells[r * n + c] }) }
         val baseText = min(cellSize * 0.56f, clueUnitW * 0.78f)
@@ -227,15 +234,47 @@ class BoardView(context: Context) : View(context) {
             MotionEvent.ACTION_DOWN -> {
                 val idx = hitTest(event.x, event.y)
                 if (idx < 0) return false
-                pressedIndex = idx
                 downIndex = idx
+                pressedIndex = idx
                 downAt = System.currentTimeMillis()
+                stroking = false
+                strokeDirty = false
+                paintValue = when {
+                    markMode ->
+                        if (s.cells[idx] == GameState.MARKED) GameState.EMPTY
+                        else GameState.MARKED
+
+                    s.cells[idx] == GameState.FILLED -> GameState.EMPTY
+                    else -> GameState.FILLED
+                }
+                parent?.requestDisallowInterceptTouchEvent(true)
                 invalidate()
                 return true
             }
 
             MotionEvent.ACTION_MOVE -> {
                 val idx = hitTest(event.x, event.y)
+                if (idx < 0) {
+                    if (pressedIndex != -1) {
+                        pressedIndex = -1
+                        invalidate()
+                    }
+                    return true
+                }
+                if (!stroking && idx != downIndex) {
+                    // 第一次移动到别的格子：开始一笔连续涂色
+                    stroking = true
+                    s.beginStroke()
+                    if (s.set(downIndex, paintValue)) strokeDirty = true
+                    if (s.set(idx, paintValue)) strokeDirty = true
+                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    invalidate()
+                } else if (stroking) {
+                    if (s.set(idx, paintValue)) {
+                        strokeDirty = true
+                        invalidate()
+                    }
+                }
                 if (idx != pressedIndex) {
                     pressedIndex = idx
                     invalidate()
@@ -244,18 +283,41 @@ class BoardView(context: Context) : View(context) {
             }
 
             MotionEvent.ACTION_UP -> {
-                val idx = hitTest(event.x, event.y)
-                if (idx >= 0 && idx == downIndex) {
-                    val longPress = System.currentTimeMillis() - downAt >= 340L
-                    applyCell(s, idx, longPress || markMode)
+                if (stroking) {
+                    s.endStroke()
+                    if (strokeDirty) onChange?.invoke()
+                } else {
+                    val elapsed = System.currentTimeMillis() - downAt
+                    val longPress = elapsed >= LONG_PRESS_MS
+                    val value = when {
+                        longPress && !markMode ->
+                            if (s.cells[downIndex] == GameState.MARKED) GameState.EMPTY
+                            else GameState.MARKED
+
+                        else -> paintValue
+                    }
+                    s.beginStroke()
+                    val changed = s.set(downIndex, value)
+                    s.endStroke()
+                    if (changed) {
+                        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        invalidate()
+                        onChange?.invoke()
+                    }
                 }
                 pressedIndex = -1
                 downIndex = -1
+                stroking = false
                 invalidate()
                 return true
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                if (stroking) {
+                    s.endStroke()
+                    if (strokeDirty) onChange?.invoke()
+                }
+                stroking = false
                 pressedIndex = -1
                 downIndex = -1
                 invalidate()
@@ -265,21 +327,9 @@ class BoardView(context: Context) : View(context) {
         return super.onTouchEvent(event)
     }
 
-    private fun applyCell(s: GameState, index: Int, asMark: Boolean) {
-        val current = s.cells[index]
-        val next = if (asMark) {
-            if (current == GameState.MARKED) GameState.EMPTY else GameState.MARKED
-        } else {
-            if (current == GameState.FILLED) GameState.EMPTY else GameState.FILLED
-        }
-        if (s.set(index, next)) {
-            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-            invalidate()
-            onChange?.invoke()
-        }
-    }
-
     companion object {
+        private const val LONG_PRESS_MS = 340L
+
         private val COLOR_BOARD_BG = 0xFF171C28.toInt()
         private val COLOR_CELL = 0xFF1F2737.toInt()
         private val COLOR_CELL_PRESS = 0xFF2C3A5C.toInt()

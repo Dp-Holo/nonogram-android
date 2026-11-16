@@ -11,19 +11,27 @@ android {
         applicationId = "com.dsha.nonogram"
         minSdk = 23
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
+    }
+
+    // 固定签名（仓库内自带的测试用 keystore），保证每次 CI 构建的 APK 都能覆盖安装升级
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file("keystore/nonogram-release.p12")
+            storePassword = "nonogram123"
+            keyAlias = "nonogram"
+            keyPassword = "nonogram123"
+        }
     }
 
     buildTypes {
         debug {
-            applicationIdSuffix = ""
             versionNameSuffix = "-debug"
         }
         release {
             isMinifyEnabled = false
-            // 自签名（debug keystore），保证 CI 产出的 APK 可直接安装
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
