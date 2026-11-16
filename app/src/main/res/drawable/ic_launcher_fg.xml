@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 暗色底板 -->
+    <path
+        android:fillColor="#FF1B1F2A"
+        android:pathData="M20,20 L88,20 L88,88 L20,88 Z" />
+
+    <!-- 3x3 网格：未填色格子 -->
+    <path
+        android:fillColor="#FF2A3244"
+        android:pathData="M26,26 L42,26 L42,42 L26,42 Z" />
+    <path
+        android:fillColor="#FF2A3244"
+        android:pathData="M46,26 L62,26 L62,42 L46,42 Z" />
+    <path
+        android:fillColor="#FF2A3244"
+        android:pathData="M66,26 L82,26 L82,42 L66,42 Z" />
+    <path
+        android:fillColor="#FF2A3244"
+        android:pathData="M26,46 L42,46 L42,62 L26,62 Z" />
+    <path
+        android:fillColor="#FF2A3244"
+        android:pathData="M46,46 L62,46 L62,62 L46,62 Z" />
+    <path
+        android:fillColor="#FF2A3244"
+        android:pathData="M66,46 L82,46 L82,62 L66,62 Z" />
+    <path
+        android:fillColor="#FF2A3244"
+        android:pathData="M26,66 L42,66 L42,82 L26,82 Z" />
+    <path
+        android:fillColor="#FF2A3244"
+        android:pathData="M46,66 L62,66 L62,82 L46,82 Z" />
+    <path
+        android:fillColor="#FF2A3244"
+        android:pathData="M66,66 L82,66 L82,82 L66,82 Z" />
+
+    <!-- 已填色格子 -->
+    <path
+        android:fillColor="#FF7C9CFF"
+        android:pathData="M26,26 L42,26 L42,42 L26,42 Z" />
+    <path
+        android:fillColor="#FF7C9CFF"
+        android:pathData="M46,46 L62,46 L62,62 L46,62 Z" />
+    <path
+        android:fillColor="#FF7C9CFF"
+        android:pathData="M66,66 L82,66 L82,82 L66,82 Z" />
+    <path
+        android:fillColor="#FF7C9CFF"
+        android:pathData="M66,26 L82,26 L82,42 L66,42 Z" />
+    <path
+        android:fillColor="#FFB9C8FF"
+        android:pathData="M26,66 L42,66 L42,82 L26,82 Z" />
+</vector>
