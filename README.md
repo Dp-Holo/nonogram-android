@@ -1,5 +1,7 @@
 # 数织 · Nonogram (Android)
 
+[![Android CI](https://github.com/Dp-Holo/nonogram-android/actions/workflows/android.yml/badge.svg)](https://github.com/Dp-Holo/nonogram-android/actions/workflows/android.yml)
+
 一个可以直接在安卓手机上玩的**数织 / 数回 / Nonogram / Picross**小游戏。
 纯 Kotlin + 自绘 View 实现，无第三方依赖，由 GitHub Actions 自动构建 APK。
 
@@ -7,11 +9,22 @@
 > 例如提示 `3 1` 表示「先连涂 3 格，中间至少空 1 格，再涂 1 格」。
 > 把所有该涂的格子涂满、不该涂的保持空白，就画出一幅像素图。
 
-## 截图
+## 预览
 
-| 关卡 | 10×10 关卡 | 提示被满足时自动变暗 |
-| :--: | :--: | :--: |
-| 见 APP 内实际效果 | 见 APP 内实际效果 | 见 APP 内实际效果 |
+第 5 关「心形」涂完之后是这样（`#` = 涂色，`·` = 空白）：
+
+```
+· · # # · · # # · ·
+· # # # # · # # # #
+# # # # # # # # # #
+# # # # # # # # # #
+# # # # # # # # # #
+# # # # # # # # # #
+· # # # # # # # # ·
+· · # # # # # # · ·
+· · · # # # # · · ·
+· · · · # # · · · ·
+```
 
 ## 功能
 
@@ -40,11 +53,12 @@
 
 ## 安装
 
-1. 打开 [Releases](../../releases) 页面；
-2. 下载 `app-debug.apk`；
-3. 在手机上点开安装（首次需允许「安装未知来源应用」）。
+**方式一（推荐）**：打开 [最新 Release](https://github.com/Dp-Holo/nonogram-android/releases/latest)，
+下载下方的 `app-debug.apk`，点开安装（首次会提示「允许安装未知应用」，按提示允许即可）。
 
-> 需要 Android 6.0 (API 23) 及以上。
+**方式二**：在手机的文件管理里打开 `Download/DSHA/app-debug.apk`（构建产物已提前放好一份）。
+
+> 需要 Android 6.0 (API 23) 及以上；APK 使用 debug 签名，可正常安装，但升级覆盖时需保持同一签名。
 
 ## 从源码构建
 
