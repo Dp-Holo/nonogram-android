@@ -9,3 +9,6 @@ captures/
 .externalNativeBuild/
 .cxx/
 *.hprof
+
+# 本地构建产物
+out/
