@@ -349,14 +349,18 @@ class MainActivity : Activity() {
             setPadding(dp(16f), dp(14f), dp(16f), dp(14f))
         }
         val next = Builtins.next(puzzle)
+        val generated = puzzle.key.startsWith("gen_")
         val builder = AlertDialog.Builder(this)
             .setTitle("🎉 过关！")
             .setView(message)
             .setNegativeButton("关闭", null)
-        if (next != null) {
-            builder.setPositiveButton("下一关") { _, _ -> loadPuzzle(next) }
-        } else {
-            builder.setPositiveButton("选关") { _, _ -> showLevels() }
+        when {
+            // 内置关卡：进入下一关内置关
+            next != null -> builder.setPositiveButton("下一关") { _, _ -> loadPuzzle(next) }
+            // 随机关卡：同尺寸再出一道新的（图案不与已有题目重复）
+            generated -> builder.setPositiveButton("下一关") { _, _ -> generateLevel(puzzle.size) }
+            // 图片关卡：回到选关
+            else -> builder.setPositiveButton("选关") { _, _ -> showLevels() }
         }
         builder.show()
     }
@@ -581,11 +585,23 @@ class MainActivity : Activity() {
             .create()
         dialog.show()
 
+        // 同尺寸已出现过的图案全部收集起来，保证新题不重复（在 UI 线程算好再交给后台线程）
+        val existing = existingPatterns(size)
         Thread {
-            val solution = Generator.generate(size)
+            var solution: BooleanArray? = null
+            var tries = 0
+            while (tries < MAX_GENERATE_TRIES) {
+                tries++
+                val candidate = Generator.generate(size) ?: break
+                if (!existing.contains(Puzzle.rowsOf(candidate, size))) {
+                    solution = candidate
+                    break
+                }
+            }
+            val generated = solution
             runOnUiThread {
                 dialog.dismiss()
-                if (solution == null) {
+                if (generated == null) {
                     toast("生成失败，请再试一次")
                     return@runOnUiThread
                 }
@@ -594,12 +610,28 @@ class MainActivity : Activity() {
                     "gen_${System.currentTimeMillis()}",
                     name,
                     size,
-                    solution
+                    generated
                 )
                 store.add(puzzle)
                 loadPuzzle(puzzle)
             }
         }.start()
+    }
+
+    /** 同尺寸已经出现过的图案（内置 + 我的关卡），用于连续出题时去重 */
+    private fun existingPatterns(size: Int): HashSet<String> {
+        val patterns = HashSet<String>()
+        for (puzzle in Builtins.puzzles) {
+            if (puzzle.size == size) patterns.add(puzzle.toRowsString())
+        }
+        for (puzzle in store.all()) {
+            if (puzzle.size == size) patterns.add(puzzle.toRowsString())
+        }
+        // 当前正在玩的题目也要排除（即使它刚刚被从列表里删掉）
+        if (this::current.isInitialized && current.size == size) {
+            patterns.add(current.toRowsString())
+        }
+        return patterns
     }
 
     // ---------------------------------------------------------- 图片导入
@@ -792,6 +824,7 @@ class MainActivity : Activity() {
         private const val REQ_PICK_IMAGE = 1001
         private const val MIN_SIZE = 5
         private const val MAX_SIZE = 20
+        private const val MAX_GENERATE_TRIES = 20
 
         private val BG = 0xFF12141A.toInt()
         private val TEXT = 0xFFE7ECF7.toInt()

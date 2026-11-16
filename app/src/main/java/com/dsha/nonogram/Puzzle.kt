@@ -66,6 +66,14 @@ class Puzzle(
         /** 由答案位图直接构建关卡 */
         fun fromSolution(key: String, name: String, size: Int, solution: BooleanArray): Puzzle =
             Puzzle(key, name, size, solution)
+
+        /** 把答案位图导出为多行 '#/.' 文本，用于去重比较 */
+        fun rowsOf(solution: BooleanArray, size: Int): String = buildString {
+            for (r in 0 until size) {
+                for (c in 0 until size) append(if (solution[r * size + c]) '#' else '.')
+                if (r != size - 1) append('\n')
+            }
+        }
     }
 }
 
