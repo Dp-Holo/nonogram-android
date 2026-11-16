@@ -72,11 +72,17 @@
 ## 安装
 
 **方式一（推荐）**：打开 [最新 Release](https://github.com/Dp-Holo/nonogram-android/releases/latest)，
-下载下方的 `app-debug.apk`，点开安装（首次会提示「允许安装未知应用」，按提示允许即可）。
+下载下方的 `app-release.apk`，点开安装（首次会提示「允许安装未知应用」，按提示允许即可）。
 
-**方式二**：在手机的文件管理里打开 `Download/DSHA/app-debug.apk`（构建产物已提前放好一份）。
+**方式二**：在手机的文件管理里打开 `Download/DSHA/app-release.apk`（构建产物已提前放好一份）。
 
-> 需要 Android 6.0 (API 23) 及以上；APK 使用 debug 签名，可正常安装，但升级覆盖时需保持同一签名。
+> 需要 Android 6.0 (API 23) 及以上。
+
+## 签名说明
+
+仓库里的 `keystore/nonogram-release.p12` 是自用的**固定签名**（口令见 `app/build.gradle.kts`），
+好处是每次 CI 构建的 APK 签名一致，可以直接覆盖升级；但公开仓库等于公开密钥，仅适合自用/测试分发，
+正式上架请换成私钥并由 CI secret 注入。
 
 ## 从源码构建
 
