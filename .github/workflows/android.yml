@@ -42,6 +42,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run unit tests
+        run: ./gradlew test --stacktrace --no-daemon
+
       - name: Build release APK
         run: ./gradlew assembleRelease --stacktrace --no-daemon
 

@@ -2,6 +2,8 @@ package com.dsha.nonogram
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Typeface
@@ -22,6 +24,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import java.util.Locale
+import java.util.Random
 
 class MainActivity : Activity() {
 
@@ -44,6 +47,7 @@ class MainActivity : Activity() {
     private var timerRunning = false
 
     private val handler = Handler(Looper.getMainLooper())
+    private val hintRandom = Random()
     private var levelsDialog: AlertDialog? = null
 
     private val ticker = object : Runnable {
@@ -145,13 +149,15 @@ class MainActivity : Activity() {
         val footer = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         undoButton = makeButton("撤销") { onUndo() }
         markButton = makeButton("标记") { toggleMark() }
+        val hintButton = makeButton("提示") { onHint() }
         val resetButton = makeButton("重来") { onReset() }
         val levelButton = makeButton("关卡") { showLevels() }
-        listOf(undoButton, markButton, resetButton, levelButton).forEachIndexed { index, button ->
+        val buttons = listOf(undoButton, markButton, hintButton, resetButton, levelButton)
+        buttons.forEachIndexed { index, button ->
             footer.addView(
                 button,
                 LinearLayout.LayoutParams(0, dp(46f), 1f).apply {
-                    if (index > 0) marginStart = dp(8f)
+                    if (index > 0) marginStart = dp(6f)
                 }
             )
         }
@@ -178,7 +184,7 @@ class MainActivity : Activity() {
         tv.text = label
         tv.gravity = Gravity.CENTER
         tv.setTextColor(TEXT_DIM)
-        tv.textSize = 13.5f
+        tv.textSize = 12.5f
         tv.typeface = Typeface.DEFAULT_BOLD
         tv.background = rounded(BTN_BG, BTN_STROKE, 12f)
         tv.isClickable = true
@@ -323,6 +329,31 @@ class MainActivity : Activity() {
         board.invalidate()
     }
 
+    /** 提示：帮玩家点出 1 个本来就应该涂色的格子 */
+    private fun onHint() {
+        if (solved) {
+            toast("这一关已经完成啦")
+            return
+        }
+        val candidates = ArrayList<Int>()
+        for (i in state.cells.indices) {
+            if (current.solution[i] && state.cells[i] != GameState.FILLED) {
+                candidates.add(i)
+            }
+        }
+        if (candidates.isEmpty()) {
+            toast("没有可以提示的格子")
+            return
+        }
+        val index = candidates[hintRandom.nextInt(candidates.size)]
+        state.beginStroke()
+        state.set(index, GameState.FILLED)
+        state.endStroke()
+        board.invalidate()
+        onBoardChanged()
+        if (!solved) toast("已为你点出 1 格")
+    }
+
     private fun onBoardChanged() {
         prefs.saveCells(current.key, state.cells)
         updateButtons()
@@ -456,6 +487,11 @@ class MainActivity : Activity() {
         row.setOnClickListener {
             levelsDialog?.dismiss()
             loadPuzzle(puzzle)
+        }
+        // 长按复制关卡数据，方便把有问题的题目原样反馈给我
+        row.setOnLongClickListener {
+            copyLevelToClipboard(puzzle)
+            true
         }
 
         if (withDelete) {
@@ -779,6 +815,13 @@ class MainActivity : Activity() {
     }
 
     // ------------------------------------------------------------ 工具
+
+    private fun copyLevelToClipboard(puzzle: Puzzle) {
+        val manager = getSystemService(ClipboardManager::class.java)
+        val text = "${puzzle.name} (${puzzle.size}x${puzzle.size})\n${puzzle.toRowsString()}"
+        manager?.setPrimaryClip(ClipData.newPlainText("数织关卡", text))
+        toast("已复制「${puzzle.name}」的关卡数据")
+    }
 
     private fun toast(message: String) {
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
