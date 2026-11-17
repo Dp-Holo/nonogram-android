@@ -84,8 +84,10 @@ class GeneratorTest {
         val random = Random(42L)
         val seen = HashSet<String>()
         repeat(20) {
-            val solution = Generator.generate(8, Generator.NORMAL, random)!!
-            assertTrue("生成了重复的 8×8 图案", seen.add(Puzzle.rowsOf(solution, 8)))
+            val solution = Generator.generate(8, Generator.NORMAL, random, seen)
+            assertNotNull("第 ${'$'}it 次生成失败", solution)
+            val key = Puzzle.rowsOf(solution!!, 8)
+            assertTrue("生成了重复的 8×8 图案", seen.add(key))
         }
     }
 

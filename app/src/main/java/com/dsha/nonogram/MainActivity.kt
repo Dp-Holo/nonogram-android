@@ -718,17 +718,7 @@ class MainActivity : Activity() {
         // 同尺寸已出现过的图案全部收集起来，保证新题不重复（在 UI 线程算好再交给后台线程）
         val existing = existingPatterns(size)
         Thread {
-            var solution: BooleanArray? = null
-            var tries = 0
-            while (tries < MAX_GENERATE_TRIES) {
-                tries++
-                val candidate = Generator.generate(size, difficulty) ?: break
-                if (!existing.contains(Puzzle.rowsOf(candidate, size))) {
-                    solution = candidate
-                    break
-                }
-            }
-            val generated = solution
+            val generated = Generator.generate(size, difficulty, avoid = existing)
             runOnUiThread {
                 dialog.dismiss()
                 if (generated == null) {

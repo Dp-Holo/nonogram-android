@@ -39,8 +39,16 @@ object Generator {
         else -> ShapeConfig(density = 0.55, smoothTimes = 1, componentLimit = 2)
     }
 
-    /** 生成一张 size×size 的答案位图；失败返回 null */
-    fun generate(size: Int, difficulty: Int = NORMAL, random: Random = Random()): BooleanArray? {
+    /**
+     * 生成一张 size×size 的答案位图；失败返回 null。
+     * @param avoid 已经出现过的图案（多行 #/. 文本），生成时会跳过，保证不重复
+     */
+    fun generate(
+        size: Int,
+        difficulty: Int = NORMAL,
+        random: Random = Random(),
+        avoid: Set<String> = emptySet()
+    ): BooleanArray? {
         if (size < 3 || size > 30) return null
         val config = configFor(difficulty)
         val deadline = System.currentTimeMillis() + TIME_BUDGET_MS
@@ -51,7 +59,9 @@ object Generator {
             if (attempts % 64 == 0 && System.currentTimeMillis() > deadline) break
             val solution = randomShape(size, random, config) ?: continue
             // 只用行列约束传播能推满全部格子 = 逻辑唯一解，玩家不用猜
-            if (roundsOf(solution, size) > 0) return solution
+            if (roundsOf(solution, size) <= 0) continue
+            if (avoid.isNotEmpty() && Puzzle.rowsOf(solution, size) in avoid) continue
+            return solution
         }
         return null
     }
