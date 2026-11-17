@@ -33,7 +33,7 @@ class GeneratorTest {
         val random = Random(20261116L)
         for (size in intArrayOf(5, 8, 10, 15, 20)) {
             repeat(5) { round ->
-                val solution = Generator.generate(size, random)
+                val solution = Generator.generate(size, Generator.NORMAL, random)
                 assertNotNull("size=$size 第 $round 次生成失败", solution)
                 val puzzle = Puzzle.fromSolution("t", "t", size, solution!!)
 
@@ -54,7 +54,7 @@ class GeneratorTest {
     fun cluesMatchSolution() {
         val random = Random(7L)
         for (size in intArrayOf(5, 8, 10, 15)) {
-            val solution = Generator.generate(size, random)!!
+            val solution = Generator.generate(size, Generator.NORMAL, random)!!
             val puzzle = Puzzle.fromSolution("t", "t", size, solution)
 
             for (r in 0 until size) {
@@ -84,7 +84,7 @@ class GeneratorTest {
         val random = Random(42L)
         val seen = HashSet<String>()
         repeat(20) {
-            val solution = Generator.generate(8, random)!!
+            val solution = Generator.generate(8, Generator.NORMAL, random)!!
             assertTrue("生成了重复的 8×8 图案", seen.add(Puzzle.rowsOf(solution, 8)))
         }
     }
@@ -92,13 +92,73 @@ class GeneratorTest {
     @Test
     fun rowsRoundTrip() {
         val random = Random(3L)
-        val solution = Generator.generate(10, random)!!
+        val solution = Generator.generate(10, Generator.NORMAL, random)!!
         val puzzle = Puzzle.fromSolution("x", "x", 10, solution)
         val restored = Puzzle.fromRows("x", "x", puzzle.toRowsString().split("\n"))
         assertNotNull(restored)
         assertEquals(puzzle.size, restored!!.size)
         for (i in solution.indices) {
             assertEquals(solution[i], restored.solution[i])
+        }
+    }
+
+    @Test
+    fun generatedPuzzlesHaveGoodShape() {
+        val random = Random(1234L)
+        for (size in intArrayOf(5, 8, 10, 15, 20)) {
+            val solution = Generator.generate(size, Generator.NORMAL, random)
+            assertNotNull("size=$size 生成失败", solution)
+            val s = solution!!
+
+            val components = Generator.connectedComponents(s, size)
+            assertTrue("size=$size 涂色块太散（$components 块）", components in 1..2)
+
+            val puzzle = Puzzle.fromSolution("t", "t", size, s)
+            assertTrue("size=$size 出现整行为空", puzzle.rowClues.none { it == listOf(0) })
+            assertTrue("size=$size 出现整列为空", puzzle.colClues.none { it == listOf(0) })
+
+            val state = IntArray(size * size)
+            assertTrue("size=$size 无法逻辑唯一推出", Generator.propagate(size, puzzle.rowClues, puzzle.colClues, state))
+        }
+    }
+
+    @Test
+    fun difficultyChangesClueDensity() {
+        val random = Random(77L)
+
+        fun clueTotal(solution: BooleanArray, size: Int): Int {
+            val (rows, cols) = Generator.cluesOf(solution, size)
+            return rows.sumOf { it.size } + cols.sumOf { it.size }
+        }
+
+        val easy = (0 until 3).map {
+            val s = Generator.generate(10, Generator.EASY, random)
+            assertNotNull("简单难度生成失败", s)
+            clueTotal(s!!, 10)
+        }.average()
+        val hard = (0 until 3).map {
+            val s = Generator.generate(10, Generator.HARD, random)
+            assertNotNull("困难难度生成失败", s)
+            clueTotal(s!!, 10)
+        }.average()
+
+        assertTrue("困难题的提示数应明显多于简单题: easy=$easy hard=$hard", hard > easy + 6)
+    }
+
+    @Test
+    fun generatedPuzzlesAreAlwaysUniqueSolvable() {
+        val random = Random(2026L)
+        for (difficulty in intArrayOf(Generator.EASY, Generator.NORMAL, Generator.HARD)) {
+            for (size in intArrayOf(5, 10, 15)) {
+                repeat(2) {
+                    val s = Generator.generate(size, difficulty, random)
+                    assertNotNull("difficulty=$difficulty size=$size 生成失败", s)
+                    assertTrue(
+                        "difficulty=$difficulty size=$size 不是逻辑唯一解",
+                        Generator.roundsOf(s!!, size) > 0
+                    )
+                }
+            }
         }
     }
 }

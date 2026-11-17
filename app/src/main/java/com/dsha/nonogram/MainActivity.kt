@@ -42,6 +42,7 @@ class MainActivity : Activity() {
 
     private var solved = false
     private var markMode = false
+    private var lastDifficulty = Generator.NORMAL
     private var startAt = 0L
     private var elapsedMs = 0L
     private var timerRunning = false
@@ -389,7 +390,7 @@ class MainActivity : Activity() {
             // 内置关卡：进入下一关内置关
             next != null -> builder.setPositiveButton("下一关") { _, _ -> loadPuzzle(next) }
             // 随机关卡：同尺寸再出一道新的（图案不与已有题目重复）
-            generated -> builder.setPositiveButton("下一关") { _, _ -> generateLevel(puzzle.size) }
+            generated -> builder.setPositiveButton("下一关") { _, _ -> generateLevel(puzzle.size, lastDifficulty) }
             // 图片关卡：回到选关
             else -> builder.setPositiveButton("选关") { _, _ -> showLevels() }
         }
@@ -422,6 +423,17 @@ class MainActivity : Activity() {
         )
         actions.addView(imgButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(actions)
+
+        val editRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(10f), dp(0f), dp(10f), dp(10f))
+        }
+        val editButton = makeChip("✏️ 自编关卡（自己画图案）") {
+            levelsDialog?.dismiss()
+            showEditorSizeDialog()
+        }
+        editRow.addView(editButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        root.addView(editRow)
 
         root.addView(sectionLabel("内置关卡"))
         for (puzzle in Builtins.puzzles) {
@@ -525,13 +537,11 @@ class MainActivity : Activity() {
 
     // -------------------------------------------------------- 随机生成
 
-    private fun showGenerateDialog() {
-        var size = 10
+    // -------------------------------------------------------- 尺寸选择
 
-        val column = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(20f), dp(16f), dp(20f), dp(8f))
-        }
+    /** 往对话框里放一个尺寸选择器（大标题 + 滑杆 + 预设），返回读取当前尺寸的函数 */
+    private fun buildSizePicker(column: LinearLayout, initial: Int): () -> Int {
+        var size = initial
 
         val sizeText = TextView(this).apply {
             text = "$size × $size"
@@ -599,17 +609,101 @@ class MainActivity : Activity() {
             ).apply { topMargin = dp(10f) }
         )
 
+        return { size }
+    }
+
+    private fun showGenerateDialog() {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20f), dp(16f), dp(20f), dp(8f))
+        }
+        val getSize = buildSizePicker(column, 10)
+
+        var difficulty = lastDifficulty
+        val difficultyButtons = ArrayList<TextView>()
+        fun refreshDifficulty() {
+            difficultyButtons.forEachIndexed { index, chip ->
+                val selected = index == difficulty
+                chip.background = rounded(
+                    if (selected) BTN_ACTIVE else BTN_BG,
+                    if (selected) ACCENT else BTN_STROKE,
+                    10f
+                )
+                chip.setTextColor(if (selected) ACCENT else TEXT_DIM)
+            }
+        }
+
+        val difficultyLabel = TextView(this).apply {
+            text = "难度（简单 = 大块好推，困难 = 碎块更多）"
+            setTextColor(TEXT_DIM)
+            textSize = 12f
+        }
+        column.addView(
+            difficultyLabel,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(14f) }
+        )
+
+        val difficultyRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        for (value in 0..2) {
+            val chip = makeChip(Generator.difficultyName(value)) {
+                difficulty = value
+                refreshDifficulty()
+            }
+            difficultyButtons.add(chip)
+            difficultyRow.addView(
+                chip,
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (value > 0) marginStart = dp(8f)
+                }
+            )
+        }
+        column.addView(
+            difficultyRow,
+            LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(8f) }
+        )
+        refreshDifficulty()
+
         AlertDialog.Builder(this)
             .setTitle("随机出题")
             .setView(column)
-            .setPositiveButton("开始生成") { _, _ -> generateLevel(size) }
+            .setPositiveButton("开始生成") { _, _ -> generateLevel(getSize(), difficulty) }
             .setNegativeButton("取消", null)
             .show()
     }
 
-    private fun generateLevel(size: Int) {
+    private fun showEditorSizeDialog() {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20f), dp(16f), dp(20f), dp(8f))
+        }
+        val getSize = buildSizePicker(column, 10)
+        AlertDialog.Builder(this)
+            .setTitle("自编关卡")
+            .setView(column)
+            .setPositiveButton("开始绘制") { _, _ -> openEditor(getSize(), null, "自编") }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun openEditor(size: Int, grid: BooleanArray?, prefix: String) {
+        val intent = Intent(this, EditorActivity::class.java).apply {
+            putExtra(EditorActivity.EXTRA_SIZE, size)
+            putExtra(EditorActivity.EXTRA_PREFIX, prefix)
+            if (grid != null) putExtra(EditorActivity.EXTRA_ROWS, Puzzle.rowsOf(grid, size))
+        }
+        startActivityForResult(intent, REQ_EDITOR)
+    }
+
+    private fun generateLevel(size: Int, difficulty: Int = Generator.NORMAL) {
+        lastDifficulty = difficulty
         val loading = TextView(this).apply {
-            text = "正在生成 ${size}×${size} 关卡…\n（保证逻辑可解，不需要猜）"
+            text = "正在生成 ${size}×${size}（${Generator.difficultyName(difficulty)}）…\n（保证逻辑可解，不需要猜）"
             setTextColor(TEXT)
             textSize = 14f
             gravity = Gravity.CENTER
@@ -628,7 +722,7 @@ class MainActivity : Activity() {
             var tries = 0
             while (tries < MAX_GENERATE_TRIES) {
                 tries++
-                val candidate = Generator.generate(size) ?: break
+                val candidate = Generator.generate(size, difficulty) ?: break
                 if (!existing.contains(Puzzle.rowsOf(candidate, size))) {
                     solution = candidate
                     break
@@ -654,22 +748,6 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    /** 同尺寸已经出现过的图案（内置 + 我的关卡），用于连续出题时去重 */
-    private fun existingPatterns(size: Int): HashSet<String> {
-        val patterns = HashSet<String>()
-        for (puzzle in Builtins.puzzles) {
-            if (puzzle.size == size) patterns.add(puzzle.toRowsString())
-        }
-        for (puzzle in store.all()) {
-            if (puzzle.size == size) patterns.add(puzzle.toRowsString())
-        }
-        // 当前正在玩的题目也要排除（即使它刚刚被从列表里删掉）
-        if (this::current.isInitialized && current.size == size) {
-            patterns.add(current.toRowsString())
-        }
-        return patterns
-    }
-
     // ---------------------------------------------------------- 图片导入
 
     private fun pickImage() {
@@ -686,14 +764,24 @@ class MainActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQ_PICK_IMAGE || resultCode != RESULT_OK) return
-        val uri = data?.data ?: return
-        val bitmap = ImageImport.loadBitmap(this, uri)
-        if (bitmap == null) {
-            toast("图片读取失败，换一张试试")
-            return
+        if (resultCode != RESULT_OK) return
+        when (requestCode) {
+            REQ_PICK_IMAGE -> {
+                val uri = data?.data ?: return
+                val bitmap = ImageImport.loadBitmap(this, uri)
+                if (bitmap == null) {
+                    toast("图片读取失败，换一张试试")
+                    return
+                }
+                showImageDialog(bitmap)
+            }
+
+            REQ_EDITOR -> {
+                val key = data?.getStringExtra(EditorActivity.EXTRA_KEY) ?: return
+                val puzzle = store.find(key) ?: return
+                loadPuzzle(puzzle)
+            }
         }
-        showImageDialog(bitmap)
     }
 
     private fun showImageDialog(bitmap: Bitmap) {
@@ -810,6 +898,10 @@ class MainActivity : Activity() {
                     loadPuzzle(puzzle)
                 }
             }
+            .setNeutralButton("修正像素") { _, _ ->
+                val grid = ImageImport.gridFrom(luminance, threshold, invert)
+                openEditor(size, grid, "图片")
+            }
             .setNegativeButton("取消", null)
             .show()
     }
@@ -865,6 +957,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_PICK_IMAGE = 1001
+        private const val REQ_EDITOR = 1002
         private const val MIN_SIZE = 5
         private const val MAX_SIZE = 20
         private const val MAX_GENERATE_TRIES = 20
