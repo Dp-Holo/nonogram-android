@@ -113,7 +113,7 @@ class GeneratorTest {
             val s = solution!!
 
             val components = Generator.connectedComponents(s, size)
-            assertTrue("size=$size 涂色块太散（$components 块）", components in 1..2)
+            assertTrue("size=$size 涂色块太散（$components 块）", components in 1..3)
 
             val puzzle = Puzzle.fromSolution("t", "t", size, s)
             assertTrue("size=$size 出现整行为空", puzzle.rowClues.none { it == listOf(0) })
@@ -162,5 +162,34 @@ class GeneratorTest {
                 }
             }
         }
+    }
+
+    private fun isMirrorSymmetric(grid: BooleanArray, size: Int): Boolean {
+        var vertical = true
+        for (r in 0 until size) {
+            for (c in 0 until size / 2) {
+                if (grid[r * size + c] != grid[r * size + size - 1 - c]) vertical = false
+            }
+        }
+        if (vertical) return true
+        var horizontal = true
+        for (r in 0 until size / 2) {
+            for (c in 0 until size) {
+                if (grid[r * size + c] != grid[(size - 1 - r) * size + c]) horizontal = false
+            }
+        }
+        return horizontal
+    }
+
+    @Test
+    fun generatedPuzzlesAreNotAllSymmetric() {
+        val random = Random(99L)
+        var asymmetric = 0
+        repeat(10) {
+            val solution = Generator.generate(8, Generator.NORMAL, random)
+            assertNotNull("第 ${'$'}it 次生成失败", solution)
+            if (!isMirrorSymmetric(solution!!, 8)) asymmetric++
+        }
+        assertTrue("10 道题里应有多道不是对称图案（实际非对称 ${'$'}asymmetric 道）", asymmetric >= 2)
     }
 }

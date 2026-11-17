@@ -24,8 +24,11 @@ object Generator {
     const val NORMAL = 1
     const val HARD = 2
 
-    private const val MAX_ATTEMPTS = 3000
-    private const val TIME_BUDGET_MS = 5000L
+    private const val MAX_ATTEMPTS = 30000
+    private const val TIME_BUDGET_MS = 2500L
+
+    /** 40% 的题做成对称图案，其余是自然形状，避免清一色对称 */
+    private const val MIRROR_CHANCE = 0.40
 
     private class ShapeConfig(
         val density: Double,
@@ -34,9 +37,9 @@ object Generator {
     )
 
     private fun configFor(difficulty: Int): ShapeConfig = when (difficulty) {
-        EASY -> ShapeConfig(density = 0.62, smoothTimes = 2, componentLimit = 2)
-        HARD -> ShapeConfig(density = 0.52, smoothTimes = 0, componentLimit = 3)
-        else -> ShapeConfig(density = 0.55, smoothTimes = 1, componentLimit = 2)
+        EASY -> ShapeConfig(density = 0.66, smoothTimes = 2, componentLimit = 2)
+        HARD -> ShapeConfig(density = 0.60, smoothTimes = 0, componentLimit = 3)
+        else -> ShapeConfig(density = 0.60, smoothTimes = 1, componentLimit = 3)
     }
 
     /**
@@ -51,13 +54,28 @@ object Generator {
     ): BooleanArray? {
         if (size < 3 || size > 30) return null
         val config = configFor(difficulty)
+
+        // 每次生成时决定风格：自然形状 / 对称图案
+        val mirrored = random.nextDouble() < MIRROR_CHANCE
+        val first = tryGenerate(size, config, random, mirrored, avoid)
+        if (first != null) return first
+        // 兜底：对称图案更容易成题，保证不会出不了题
+        return tryGenerate(size, config, random, true, avoid)
+    }
+
+    private fun tryGenerate(
+        size: Int,
+        config: ShapeConfig,
+        random: Random,
+        mirrored: Boolean,
+        avoid: Set<String>
+    ): BooleanArray? {
         val deadline = System.currentTimeMillis() + TIME_BUDGET_MS
         var attempts = 0
-
         while (attempts < MAX_ATTEMPTS) {
             attempts++
             if (attempts % 64 == 0 && System.currentTimeMillis() > deadline) break
-            val solution = randomShape(size, random, config) ?: continue
+            val solution = randomShape(size, random, config, mirrored) ?: continue
             // 只用行列约束传播能推满全部格子 = 逻辑唯一解，玩家不用猜
             if (roundsOf(solution, size) <= 0) continue
             if (avoid.isNotEmpty() && Puzzle.rowsOf(solution, size) in avoid) continue
@@ -75,16 +93,23 @@ object Generator {
 
     // ------------------------------------------------------------ 形状生成
 
-    private fun randomShape(size: Int, random: Random, config: ShapeConfig): BooleanArray? {
+    private fun randomShape(
+        size: Int,
+        random: Random,
+        config: ShapeConfig,
+        mirrored: Boolean
+    ): BooleanArray? {
         var grid = BooleanArray(size * size) { random.nextDouble() < config.density }
 
-        // 随机镜像轴：竖 / 横 / 双轴，交给玩家一个「像画出来的」图案
-        when (random.nextInt(3)) {
-            0 -> mirrorVertical(grid, size)
-            1 -> mirrorHorizontal(grid, size)
-            else -> {
-                mirrorVertical(grid, size)
-                mirrorHorizontal(grid, size)
+        if (mirrored) {
+            // 偶尔来一道对称图案：竖 / 横 / 双轴
+            when (random.nextInt(3)) {
+                0 -> mirrorVertical(grid, size)
+                1 -> mirrorHorizontal(grid, size)
+                else -> {
+                    mirrorVertical(grid, size)
+                    mirrorHorizontal(grid, size)
+                }
             }
         }
 
