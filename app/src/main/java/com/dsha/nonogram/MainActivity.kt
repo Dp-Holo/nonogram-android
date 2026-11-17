@@ -748,6 +748,22 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    /** 同尺寸已经出现过的图案（内置 + 我的关卡 + 当前关），用于连续出题时去重 */
+    private fun existingPatterns(size: Int): HashSet<String> {
+        val patterns = HashSet<String>()
+        for (puzzle in Builtins.puzzles) {
+            if (puzzle.size == size) patterns.add(puzzle.toRowsString())
+        }
+        for (puzzle in store.all()) {
+            if (puzzle.size == size) patterns.add(puzzle.toRowsString())
+        }
+        // 当前正在玩的题目也要排除（即使它刚刚被从列表里删掉）
+        if (this::current.isInitialized && current.size == size) {
+            patterns.add(current.toRowsString())
+        }
+        return patterns
+    }
+
     // ---------------------------------------------------------- 图片导入
 
     private fun pickImage() {
