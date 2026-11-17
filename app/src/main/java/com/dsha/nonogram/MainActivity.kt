@@ -798,7 +798,7 @@ class MainActivity : Activity() {
                     toast("生成失败，请再试一次")
                     return@runOnUiThread
                 }
-                val name = "随机 ${size}×${size} #${store.count() + 1}"
+                val name = "随机 ${size}×${size}·${Generator.difficultyName(difficulty)} #${store.count() + 1}"
                 val puzzle = Puzzle.fromSolution(
                     "gen_${System.currentTimeMillis()}",
                     name,

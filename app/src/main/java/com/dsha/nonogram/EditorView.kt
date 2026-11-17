@@ -136,7 +136,7 @@ class EditorView(context: Context) : View(context) {
 
         linePaint.style = Paint.Style.STROKE
         for (i in 0..size) {
-            val strong = (size > 5 && i % 5 == 0) || i == 0 || i == size
+            val strong = i == 0 || i == size || (size > 5 && size % 5 == 0 && i % 5 == 0)
             linePaint.color = if (strong) COLOR_LINE_STRONG else COLOR_LINE
             linePaint.strokeWidth =
                 if (strong) max(dp(1.1f), cellSize * 0.035f) else max(dp(0.5f), cellSize * 0.02f)

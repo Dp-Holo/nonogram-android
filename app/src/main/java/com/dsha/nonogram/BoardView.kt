@@ -158,7 +158,8 @@ class BoardView(context: Context) : View(context) {
 
         linePaint.style = Paint.Style.STROKE
         for (i in 0..n) {
-            val strong = (n > 5 && i % 5 == 0) || i == 0 || i == n
+            // 只有 5 的倍数尺寸（10/15/20）才画 5 格分隔线；8×8 这类不画中间的线
+            val strong = i == 0 || i == n || (n > 5 && n % 5 == 0 && i % 5 == 0)
             linePaint.color = if (strong) COLOR_LINE_STRONG else COLOR_LINE
             linePaint.strokeWidth =
                 if (strong) max(dp(1.2f), cellSize * 0.04f) else max(dp(0.6f), cellSize * 0.02f)
