@@ -144,10 +144,11 @@ object Builtins {
 
     fun find(key: String): Puzzle? = puzzles.firstOrNull { it.key == key }
 
-    /** 内置关卡序号 -> 下一关 */
+    /** 内置关卡序号 -> 下一关（新手引导按棋盘尺寸成组，不跨尺寸跳） */
     fun next(puzzle: Puzzle): Puzzle? {
         val index = puzzle.builtinIndex
         if (index < 0 || index + 1 >= puzzles.size) return null
-        return puzzles[index + 1]
+        val next = puzzles[index + 1]
+        return if (next.size == puzzle.size) next else null
     }
 }

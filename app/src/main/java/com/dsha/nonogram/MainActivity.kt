@@ -63,7 +63,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
-        store = PuzzleStore(this)
+        store = PuzzleStore.get(this)
         buildUi()
         loadPuzzleByKey(prefs.lastPuzzleKey())
     }
@@ -380,7 +380,8 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(dp(16f), dp(14f), dp(16f), dp(14f))
         }
-        val next = Builtins.next(puzzle)
+        // 内置关按尺寸成组：下一关只在本尺寸的新手引导里找
+        val next = if (puzzle.builtinIndex >= 0) Builtins.next(puzzle) else null
         val generated = puzzle.key.startsWith("gen_")
         val builder = AlertDialog.Builder(this)
             .setTitle("🎉 过关！")
@@ -435,26 +436,33 @@ class MainActivity : Activity() {
         editRow.addView(editButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(editRow)
 
-        root.addView(sectionLabel("内置关卡"))
-        for (puzzle in Builtins.puzzles) {
-            root.addView(makeLevelRow(puzzle, withDelete = false))
-        }
-
         root.addView(sectionLabel("我的关卡"))
         val mine = store.all()
         if (mine.isEmpty()) {
             val hint = TextView(this).apply {
-                text = "还没有自建关卡：用上面的「随机出题」或「图片导入」生成一关，会自动保存在这里。"
+                text = "还没有自己的关卡：点上面的「随机出题」或「自编关卡」，生成后会自动保存在这里。"
                 setTextColor(TEXT_DIM)
                 textSize = 13f
-                setPadding(dp(16f), dp(8f), dp(16f), dp(14f))
+                setPadding(dp(16f), dp(8f), dp(16f), dp(16f))
             }
             root.addView(hint)
         } else {
             for (puzzle in mine) {
-                root.addView(makeLevelRow(puzzle, withDelete = true))
+                root.addView(makeLevelRow(puzzle, withDelete = true) { levelsDialog?.dismiss() })
             }
         }
+
+        root.addView(sectionLabel("新手引导（按棋盘尺寸）"))
+        for (size in intArrayOf(5, 10, 15)) {
+            root.addView(makeGuideRow(size))
+        }
+        val tip = TextView(this).apply {
+            text = "点一下直接开始该尺寸的入门关；长按可以挑选这一组的某一关。"
+            setTextColor(TEXT_DIM)
+            textSize = 12f
+            setPadding(dp(16f), dp(4f), dp(16f), dp(12f))
+        }
+        root.addView(tip)
 
         val scroll = ScrollView(this).apply { addView(root) }
         val dialog = AlertDialog.Builder(this)
@@ -466,7 +474,72 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
-    private fun makeLevelRow(puzzle: Puzzle, withDelete: Boolean): View {
+    /** 内置关卡现在作为「按尺寸的新手引导」，每个尺寸一行 */
+    private fun makeGuideRow(size: Int): View {
+        val group = Builtins.puzzles.filter { it.size == size }
+        val solvedCount = group.count { prefs.isSolved(it.key) }
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16f), dp(12f), dp(12f), dp(12f))
+            isClickable = true
+        }
+        val label = TextView(this).apply {
+            text = "$size×$size 入门    $solvedCount/${group.size} 关"
+            setTextColor(if (solvedCount == group.size) TEXT_DIM else TEXT)
+            textSize = 15f
+        }
+        row.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val arrow = TextView(this).apply {
+            text = "›"
+            setTextColor(ACCENT)
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(dp(8f), 0, dp(8f), 0)
+        }
+        row.addView(arrow)
+        row.setOnClickListener {
+            levelsDialog?.dismiss()
+            startGuide(size)
+        }
+        row.setOnLongClickListener {
+            levelsDialog?.dismiss()
+            showGuideList(size)
+            true
+        }
+        return row
+    }
+
+    private fun startGuide(size: Int) {
+        val group = Builtins.puzzles.filter { it.size == size }
+        val target = group.firstOrNull { !prefs.isSolved(it.key) } ?: group.firstOrNull()
+        if (target != null) loadPuzzle(target)
+    }
+
+    private fun showGuideList(size: Int) {
+        val group = Builtins.puzzles.filter { it.size == size }
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(6f), dp(4f), dp(6f), dp(8f))
+        }
+        var guideDialog: AlertDialog? = null
+        for (puzzle in group) {
+            container.addView(makeLevelRow(puzzle, withDelete = false) { guideDialog?.dismiss() })
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("$size×$size 新手引导")
+            .setView(ScrollView(this).apply { addView(container) })
+            .setNegativeButton("关闭", null)
+            .create()
+        guideDialog = dialog
+        dialog.show()
+    }
+
+    private fun makeLevelRow(
+        puzzle: Puzzle,
+        withDelete: Boolean,
+        dismissAction: () -> Unit
+    ): View {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -497,7 +570,7 @@ class MainActivity : Activity() {
         }
         row.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         row.setOnClickListener {
-            levelsDialog?.dismiss()
+            dismissAction()
             loadPuzzle(puzzle)
         }
         // 长按复制关卡数据，方便把有问题的题目原样反馈给我
@@ -519,7 +592,7 @@ class MainActivity : Activity() {
                 store.remove(puzzle.key)
                 prefs.forget(puzzle.key)
                 toast("已删除：${puzzle.name}")
-                levelsDialog?.dismiss()
+                dismissAction()
                 if (current.key == puzzle.key) loadPuzzle(Builtins.puzzles[0])
             }
             row.addView(delete)

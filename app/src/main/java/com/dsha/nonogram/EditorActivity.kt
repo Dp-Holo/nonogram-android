@@ -36,7 +36,7 @@ class EditorActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        store = PuzzleStore(this)
+        store = PuzzleStore.get(this)
         size = intent.getIntExtra(EXTRA_SIZE, 10).coerceIn(5, 20)
         namePrefix = intent.getStringExtra(EXTRA_PREFIX) ?: "自编"
         buildUi()

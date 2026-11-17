@@ -7,7 +7,7 @@ import org.json.JSONObject
 /**
  * 「我的关卡」存储：随机生成的、图片导入的关卡都存在这里（SharedPreferences + JSON）。
  */
-class PuzzleStore(context: Context) {
+class PuzzleStore private constructor(context: Context) {
 
     private val sp = context.getSharedPreferences("nonogram_custom_puzzles", Context.MODE_PRIVATE)
     private val items = ArrayList<Puzzle>()
@@ -88,6 +88,20 @@ class PuzzleStore(context: Context) {
     }
 
     companion object {
+        @Volatile
+        private var shared: PuzzleStore? = null
+
+        /** 全进程共用一个实例，避免两个 Activity 各自缓存导致看不到对方新增的关卡 */
+        fun get(context: Context): PuzzleStore {
+            shared?.let { return it }
+            synchronized(this) {
+                shared?.let { return it }
+                val created = PuzzleStore(context.applicationContext)
+                shared = created
+                return created
+            }
+        }
+
         private const val KEY_LIST = "list"
         private const val MAX_ITEMS = 100
     }
