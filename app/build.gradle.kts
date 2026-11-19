@@ -11,8 +11,8 @@ android {
         applicationId = "com.dsha.nonogram"
         minSdk = 23
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.2.3"
+        versionCode = 9
+        versionName = "1.3.0"
     }
 
     // 固定签名（仓库内自带的测试用 keystore），保证每次 CI 构建的 APK 都能覆盖安装升级

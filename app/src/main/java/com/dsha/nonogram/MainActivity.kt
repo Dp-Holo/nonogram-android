@@ -49,6 +49,13 @@ class MainActivity : Activity() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val hintRandom = Random()
+
+    private lateinit var stats: StatsStore
+
+    // 预生成缓存：出完一关就悄悄把下一关生成好，「下一关」直接秒开
+    private var prefetchedSolution: BooleanArray? = null
+    private var prefetchedToken: String? = null
+    private var prefetchRunning = false
     private var levelsDialog: AlertDialog? = null
 
     private val ticker = object : Runnable {
@@ -64,6 +71,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         store = PuzzleStore.get(this)
+        stats = StatsStore.get(this)
         buildUi()
         loadPuzzleByKey(prefs.lastPuzzleKey())
     }
@@ -272,6 +280,11 @@ class MainActivity : Activity() {
         updateHeader()
         updateButtons()
         board.invalidate()
+
+        // 随机生成的关卡：立刻在后台把同尺寸、同难度的下一关准备好
+        if (puzzle.key.startsWith("gen_")) {
+            prefetchNext(puzzle.size, difficultyOfName(puzzle.name))
+        }
     }
 
     private fun startTimer() {
@@ -364,6 +377,7 @@ class MainActivity : Activity() {
             handler.removeCallbacks(ticker)
             elapsedMs = System.currentTimeMillis() - startAt
             prefs.markSolved(current.key, elapsedMs)
+            stats.record(current.size, elapsedMs)
             updateHeader()
             showWin()
         }
@@ -391,7 +405,9 @@ class MainActivity : Activity() {
             // 内置关卡：进入下一关内置关
             next != null -> builder.setPositiveButton("下一关") { _, _ -> loadPuzzle(next) }
             // 随机关卡：同尺寸再出一道新的（图案不与已有题目重复）
-            generated -> builder.setPositiveButton("下一关") { _, _ -> generateLevel(puzzle.size, lastDifficulty) }
+            generated -> builder.setPositiveButton("下一关") {
+                _, _ -> nextGeneratedLevel(puzzle.size, difficultyOfName(puzzle.name))
+            }
             // 图片关卡：回到选关
             else -> builder.setPositiveButton("选关") { _, _ -> showLevels() }
         }
@@ -429,11 +445,21 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(10f), dp(0f), dp(10f), dp(10f))
         }
-        val editButton = makeChip("✏️ 自编关卡（自己画图案）") {
+        val editButton = makeChip("✏️ 自编关卡") {
             levelsDialog?.dismiss()
             showEditorSizeDialog()
         }
-        editRow.addView(editButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val statsButton = makeChip("📊 完成时间统计") {
+            levelsDialog?.dismiss()
+            showStats()
+        }
+        editRow.addView(
+            editButton,
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.5f).apply {
+                marginEnd = dp(8f)
+            }
+        )
+        editRow.addView(statsButton, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f))
         root.addView(editRow)
 
         root.addView(sectionLabel("我的关卡"))
@@ -809,6 +835,114 @@ class MainActivity : Activity() {
                 loadPuzzle(puzzle)
             }
         }.start()
+    }
+
+    // ------------------------------------------------------ 预生成下一关
+
+    private fun tokenOf(size: Int, difficulty: Int): String = "$size|$difficulty"
+
+    private fun difficultyOfName(name: String): Int = when {
+        name.contains("简单") -> Generator.EASY
+        name.contains("困难") -> Generator.HARD
+        else -> Generator.NORMAL
+    }
+
+    /** 后台预先生成一关（同尺寸同难度、避开已有图案） */
+    private fun prefetchNext(size: Int, difficulty: Int) {
+        val token = tokenOf(size, difficulty)
+        if (prefetchRunning || prefetchedToken == token) return
+        prefetchRunning = true
+        val existing = existingPatterns(size)
+        Thread {
+            val candidate = Generator.generate(size, difficulty, avoid = existing)
+            runOnUiThread {
+                prefetchRunning = false
+                if (candidate != null) {
+                    prefetchedSolution = candidate
+                    prefetchedToken = token
+                }
+            }
+        }.start()
+    }
+
+    /** 随机关卡过关后的「下一关」：有预生成就直接用，秒开 */
+    private fun nextGeneratedLevel(size: Int, difficulty: Int) {
+        val token = tokenOf(size, difficulty)
+        val cached = prefetchedSolution
+        if (cached != null && prefetchedToken == token) {
+            prefetchedSolution = null
+            prefetchedToken = null
+            val name = "随机 ${size}×${size}·${Generator.difficultyName(difficulty)} #${store.count() + 1}"
+            val puzzle = Puzzle.fromSolution(
+                "gen_${System.currentTimeMillis()}",
+                name,
+                size,
+                cached
+            )
+            store.add(puzzle)
+            loadPuzzle(puzzle)
+        } else {
+            generateLevel(size, difficulty)
+        }
+    }
+
+    // ------------------------------------------------------ 完成时间统计
+
+    private fun showStats() {
+        val entries = stats.entries().toMutableList()
+        val seen = HashSet<String>()
+        for (entry in entries) {
+            seen.add("${entry.first},${entry.second}")
+        }
+        // 把已通关关卡的历史最佳成绩也算进来，老数据也能看到统计
+        for (puzzle in Builtins.puzzles + store.all()) {
+            if (!prefs.isSolved(puzzle.key)) continue
+            val best = prefs.bestTime(puzzle.key)
+            if (best <= 0L) continue
+            if (seen.add("${puzzle.size},$best")) {
+                entries.add(puzzle.size to best)
+            }
+        }
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(8f), dp(4f), dp(8f), dp(10f))
+        }
+        val all = entries.map { it.second }
+        val overall = TimeStats.summarize(all)
+        val summary = TextView(this).apply {
+            text = if (overall.count == 0) {
+                "还没有完成记录：玩完一局就会出现在这里"
+            } else {
+                "共 ${overall.count} 局    平均 ${formatTime(overall.meanMs)}    中位 ${formatTime(overall.medianMs)}"
+            }
+            setTextColor(TEXT_DIM)
+            textSize = 13f
+            setPadding(dp(12f), dp(6f), dp(12f), dp(12f))
+        }
+        container.addView(summary)
+
+        for (size in MIN_SIZE..MAX_SIZE) {
+            val times = entries.filter { it.first == size }.map { it.second }
+            val stat = TimeStats.summarize(times)
+            val row = TextView(this).apply {
+                text = if (stat.count == 0) {
+                    "${size}×${size}    暂无数据"
+                } else {
+                    "${size}×${size}    ${stat.count} 次\n平均 ${formatTime(stat.meanMs)}    中位 ${formatTime(stat.medianMs)}    最快 ${formatTime(stat.bestMs)}"
+                }
+                setTextColor(if (stat.count == 0) TEXT_DIM else TEXT)
+                textSize = 13.5f
+                setPadding(dp(12f), dp(9f), dp(12f), dp(9f))
+            }
+            container.addView(row)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle("完成时间统计")
+            .setView(ScrollView(this).apply { addView(container) })
+            .setNegativeButton("关闭", null)
+            .show()
     }
 
     /** 同尺寸已经出现过的图案（内置 + 我的关卡 + 当前关），用于连续出题时去重 */
