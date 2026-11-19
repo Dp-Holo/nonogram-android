@@ -922,15 +922,22 @@ class MainActivity : Activity() {
         }
         container.addView(summary)
 
+        val textLines = ArrayList<String>()
+        textLines.add(
+            if (overall.count == 0) "还没有完成记录"
+            else "共 ${overall.count} 局    平均 ${formatTime(overall.meanMs)}    中位 ${formatTime(overall.medianMs)}"
+        )
         for (size in MIN_SIZE..MAX_SIZE) {
             val times = entries.filter { it.first == size }.map { it.second }
             val stat = TimeStats.summarize(times)
+            val text = if (stat.count == 0) {
+                "${size}×${size}    暂无数据"
+            } else {
+                "${size}×${size}    ${stat.count} 次\n平均 ${formatTime(stat.meanMs)}    中位 ${formatTime(stat.medianMs)}    最快 ${formatTime(stat.bestMs)}"
+            }
+            textLines.add(text.replace("\n", "    "))
             val row = TextView(this).apply {
-                text = if (stat.count == 0) {
-                    "${size}×${size}    暂无数据"
-                } else {
-                    "${size}×${size}    ${stat.count} 次\n平均 ${formatTime(stat.meanMs)}    中位 ${formatTime(stat.medianMs)}    最快 ${formatTime(stat.bestMs)}"
-                }
+                this.text = text
                 setTextColor(if (stat.count == 0) TEXT_DIM else TEXT)
                 textSize = 13.5f
                 setPadding(dp(12f), dp(9f), dp(12f), dp(9f))
@@ -938,9 +945,15 @@ class MainActivity : Activity() {
             container.addView(row)
         }
 
+        val table = textLines.joinToString("\n")
         AlertDialog.Builder(this)
             .setTitle("完成时间统计")
             .setView(ScrollView(this).apply { addView(container) })
+            .setPositiveButton("复制") { _, _ ->
+                val manager = getSystemService(ClipboardManager::class.java)
+                manager?.setPrimaryClip(ClipData.newPlainText("数织统计", table))
+                toast("统计已复制到剪贴板")
+            }
             .setNegativeButton("关闭", null)
             .show()
     }
