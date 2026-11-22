@@ -386,7 +386,7 @@ class MainActivity : Activity() {
             handler.removeCallbacks(ticker)
             elapsedMs = System.currentTimeMillis() - startAt
             prefs.markSolved(current.key, elapsedMs)
-            stats.record(current.size, elapsedMs)
+            stats.record(current.size, elapsedMs, difficultyForLog(current))
             recorder.solve(elapsedMs)
             recorder.endSession(solved = true)
             updateHeader()
@@ -944,7 +944,10 @@ class MainActivity : Activity() {
             val text = if (stat.count == 0) {
                 "${size}×${size}    暂无数据"
             } else {
-                "${size}×${size}    ${stat.count} 次\n平均 ${formatTime(stat.meanMs)}    中位 ${formatTime(stat.medianMs)}    最快 ${formatTime(stat.bestMs)}"
+                "${size}×${size}    ${stat.count} 次\n" +
+                    "平均 ${formatTime(stat.meanMs)}   中位 ${formatTime(stat.medianMs)}   最快 ${formatTime(stat.bestMs)}\n" +
+                    "中间一半 ${formatTime(stat.p25Ms)}–${formatTime(stat.p75Ms)}" +
+                    if (stat.count < 5) "   （样本少，仅供参考）" else ""
             }
             textLines.add(text.replace("\n", "    "))
             val row = TextView(this).apply {
