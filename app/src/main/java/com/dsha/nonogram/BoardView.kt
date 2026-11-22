@@ -41,6 +41,9 @@ class BoardView(context: Context) : View(context) {
 
     var onChange: (() -> Unit)? = null
 
+    /** 每涂/擦/打叉一格回调一次（index、新状态、同一笔的编号），用于记录操作 */
+    var onCellAction: ((index: Int, value: Int, strokeId: Long) -> Unit)? = null
+
     private var dirty = true
     private var cellSize = 0f
     private var gridLeft = 0f
@@ -64,6 +67,8 @@ class BoardView(context: Context) : View(context) {
     }
     private val tmp = RectF()
 
+    private var strokeCounter = 0L
+    private var currentStroke = 0L
     private var pressedIndex = -1
     private var downIndex = -1
     private var downAt = 0L
@@ -235,6 +240,8 @@ class BoardView(context: Context) : View(context) {
             MotionEvent.ACTION_DOWN -> {
                 val idx = hitTest(event.x, event.y)
                 if (idx < 0) return false
+                strokeCounter++
+                currentStroke = strokeCounter
                 downIndex = idx
                 pressedIndex = idx
                 downAt = System.currentTimeMillis()
@@ -266,13 +273,20 @@ class BoardView(context: Context) : View(context) {
                     // 第一次移动到别的格子：开始一笔连续涂色
                     stroking = true
                     s.beginStroke()
-                    if (s.set(downIndex, paintValue)) strokeDirty = true
-                    if (s.set(idx, paintValue)) strokeDirty = true
+                    if (s.set(downIndex, paintValue)) {
+                        strokeDirty = true
+                        onCellAction?.invoke(downIndex, paintValue, currentStroke)
+                    }
+                    if (s.set(idx, paintValue)) {
+                        strokeDirty = true
+                        onCellAction?.invoke(idx, paintValue, currentStroke)
+                    }
                     performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                     invalidate()
                 } else if (stroking) {
                     if (s.set(idx, paintValue)) {
                         strokeDirty = true
+                        onCellAction?.invoke(idx, paintValue, currentStroke)
                         invalidate()
                     }
                 }
@@ -302,6 +316,7 @@ class BoardView(context: Context) : View(context) {
                     s.endStroke()
                     if (changed) {
                         performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                        onCellAction?.invoke(downIndex, value, currentStroke)
                         invalidate()
                         onChange?.invoke()
                     }

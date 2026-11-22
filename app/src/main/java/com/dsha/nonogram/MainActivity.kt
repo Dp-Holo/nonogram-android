@@ -51,6 +51,8 @@ class MainActivity : Activity() {
     private val hintRandom = Random()
 
     private lateinit var stats: StatsStore
+    private lateinit var recorder: PlayLogger
+    private var moveCount = 0
 
     // 预生成缓存：出完一关就悄悄把下一关生成好，「下一关」直接秒开
     private var prefetchedSolution: BooleanArray? = null
@@ -72,6 +74,7 @@ class MainActivity : Activity() {
         prefs = Prefs(this)
         store = PuzzleStore.get(this)
         stats = StatsStore.get(this)
+        recorder = PlayLogger.get(this)
         buildUi()
         loadPuzzleByKey(prefs.lastPuzzleKey())
     }
@@ -146,6 +149,7 @@ class MainActivity : Activity() {
 
         board = BoardView(this)
         board.onChange = { onBoardChanged() }
+        board.onCellAction = { index, value, strokeId -> onCellActionLogged(index, value, strokeId) }
         column.addView(
             board,
             LinearLayout.LayoutParams(
@@ -277,6 +281,8 @@ class MainActivity : Activity() {
         }
 
         prefs.setLastPuzzle(puzzle.key)
+        moveCount = 0
+        recorder.beginSession(puzzle, difficultyForLog(puzzle))
         updateHeader()
         updateButtons()
         board.invalidate()
@@ -302,7 +308,7 @@ class MainActivity : Activity() {
         } else {
             formatTime(elapsedMs)
         }
-        infoView.text = "${current.size}×${current.size} · $timeText"
+        infoView.text = "${current.size}×${current.size} · $timeText · $moveCount 步"
     }
 
     private fun updateButtons() {
@@ -320,6 +326,7 @@ class MainActivity : Activity() {
 
     private fun onUndo() {
         if (!state.undo()) return
+        recorder.undo()
         prefs.saveCells(current.key, state.cells)
         updateButtons()
         board.invalidate()
@@ -333,6 +340,7 @@ class MainActivity : Activity() {
 
     private fun onReset() {
         state.reset()
+        recorder.reset()
         prefs.saveCells(current.key, state.cells)
         if (solved) {
             solved = false
@@ -363,6 +371,7 @@ class MainActivity : Activity() {
         state.beginStroke()
         state.set(index, GameState.FILLED)
         state.endStroke()
+        recorder.hint(index, current.size)
         board.invalidate()
         onBoardChanged()
         if (!solved) toast("已为你点出 1 格")
@@ -378,6 +387,8 @@ class MainActivity : Activity() {
             elapsedMs = System.currentTimeMillis() - startAt
             prefs.markSolved(current.key, elapsedMs)
             stats.record(current.size, elapsedMs)
+            recorder.solve(elapsedMs)
+            recorder.endSession(solved = true)
             updateHeader()
             showWin()
         }
@@ -954,6 +965,14 @@ class MainActivity : Activity() {
                 manager?.setPrimaryClip(ClipData.newPlainText("数织统计", table))
                 toast("统计已复制到剪贴板")
             }
+            .setNeutralButton("导出操作记录") { _, _ ->
+                val path = recorder.export(this)
+                if (path == null) {
+                    toast("还没有操作记录，先玩一局吧")
+                } else {
+                    toast("已导出到 $path")
+                }
+            }
             .setNegativeButton("关闭", null)
             .show()
     }
@@ -1156,6 +1175,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        recorder.resume()
         if (!solved && this::state.isInitialized) {
             startAt = System.currentTimeMillis() - elapsedMs
             timerRunning = true
@@ -1171,6 +1191,7 @@ class MainActivity : Activity() {
             timerRunning = false
         }
         handler.removeCallbacks(ticker)
+        recorder.pause()
         if (this::state.isInitialized) {
             prefs.saveCells(current.key, state.cells)
         }
@@ -1179,6 +1200,19 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
+        recorder.endSession(solved = solved)
+    }
+
+    // ------------------------------------------------------ 操作记录
+
+    private fun onCellActionLogged(index: Int, value: Int, strokeId: Long) {
+        moveCount++
+        recorder.cellChanged(index, value, strokeId, current.size)
+        updateHeader()
+    }
+
+    private fun difficultyForLog(puzzle: Puzzle): Int {
+        return if (puzzle.key.startsWith("gen_")) difficultyOfName(puzzle.name) else -1
     }
 
     companion object {
